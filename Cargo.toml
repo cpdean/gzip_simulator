@@ -1,0 +1,13 @@
+[package]
+name = "gunzip_simulator"
+version = "0.1.0"
+authors = ["Conrad Dean <conrad.p.dean@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+termion = "*"
+
+[dependencies.cursive]
+version = "0.10.0"
+default-features = false
+features = ["termion-backend"]
