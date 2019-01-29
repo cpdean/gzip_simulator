@@ -42,62 +42,31 @@ impl Gzipped {
         let mut end_ix = 0;
         let mut read_position = 0;
         let mut read_raw_position = 0;
-        dbg!(&bytes);
-        while dbg!(dbg!(read_position) < bytes.len()) {
-            // scan for current byte in raw
-            let current_byte_to_find = dbg!(bytes[read_position]);
-            let mut in_a_match = false;
+        let mut in_match = false;
+        while (read_position) < bytes.len() {
+            let current_byte_to_find = bytes[read_position];
             while read_raw_position < raw.len() {
                 let current_raw_byte = raw[read_raw_position];
                 if current_raw_byte == current_byte_to_find {
-                    if !in_a_match {
-                        start_ix = read_raw_position;
-                        end_ix = read_raw_position;
-                        in_a_match = true;
-                    } else {
-                        end_ix = read_raw_position;
-                    }
-                    dbg!("advancing read position because we found a match");
-                    read_position += 1;
-                    read_raw_position += 1;
+                    // found the match!
+                    // for this impl we are keeping it simple
+                    break;
                 } else {
-                    if in_a_match {
-                        // if you were in a match, then we can save whatever range we have
-                        // if the range is only a single match, just save that
-                        // Single(usize)
-                        if start_ix == end_ix {
-                            components.push(GzipComponent::Single(start_ix));
-                        } else {
-                            components.push(GzipComponent::Span(start_ix, end_ix));
-                        }
-                        read_raw_position = 0;
-                        dbg!("advancing read pos because we found a match but now we don't have match");
-                        dbg!("actually there is a bug here because when we find a non-match we should save our progress and then push a novel byte into the raw vec");
-                        read_position += 1;
-                        in_a_match = false;
-                    } else {
-                        // if you're not in a match, we have a completely novel byte
-                        // so we must save that to the raw and save a Single(..)
-                        raw.push(current_byte_to_find);
-                        dbg!(read_position += 1);
-                        components.push(GzipComponent::Single(read_raw_position));
-                    }
-                    // prep for rest of the bytes to read in
-                    read_raw_position = 0;
-                    start_ix = 0;
-                    end_ix = 0;
-                    if read_position >= bytes.len() {
-                        break;
-                    }
+                    read_raw_position += 1;
+                    continue;
                 }
             }
-            // you've broken out of the raw buffer, so append to the end of the raw
-            raw.push(current_byte_to_find);
-            components.push(GzipComponent::Single(read_raw_position));
-            dbg!(read_position += 1);
+            if !in_match {
+                // not found in raw!
+                raw.push(current_byte_to_find);
+                components.push(GzipComponent::Single(raw.len() - 1));
+            } else {
+                // we found it!
+                components.push(GzipComponent::Single(read_raw_position));
+            }
+            // start over for next byte to read
             read_raw_position = 0;
-            start_ix = 0;
-            end_ix = 0;
+            read_position += 1;
         }
         Gzipped {
             raw: raw,
