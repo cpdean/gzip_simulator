@@ -3,10 +3,10 @@
 use termion::color;
 
 use std::error::Error;
-use std::result;
+use std::fs;
 use std::io;
 use std::io::{BufRead, Write};
-use std::fs;
+use std::result;
 
 // use std::{thread, time};
 
@@ -43,27 +43,105 @@ impl Gzipped {
         let mut read_position = 0;
         let mut read_raw_position = 0;
         let mut in_match = false;
-        while (read_position) < bytes.len() {
-            let current_byte_to_find = bytes[read_position];
-            while read_raw_position < raw.len() {
-                let current_raw_byte = raw[read_raw_position];
+        if bytes.len() == 0 {
+            return Gzipped {
+                raw: raw,
+                components: components,
+            }
+        }
+        let mut current_byte_to_find = bytes[read_position];
+        let mut _view_raw = raw.as_slice();
+        let mut _view_comp = components.as_slice();
+        while read_position < bytes.len() {
+            current_byte_to_find = bytes[read_position];
+            while read_raw_position < dbg!(raw.len()) {
+                _view_raw = raw.as_slice();
+                _view_comp = components.as_slice();
+                let current_raw_byte = raw[dbg!(read_raw_position)];
                 if current_raw_byte == current_byte_to_find {
                     // found the match!
-                    // for this impl we are keeping it simple
-                    in_match = true;
-                    break;
-                } else {
+                    if !in_match {
+                        dbg!("oh boy a match");
+                        in_match = true;
+                        // record start of this match segment
+                        start_ix = read_raw_position;
+                        // start end_ix at the same so if we only match this of width 1
+                        // we know to write a Single(usize) out
+                        end_ix = read_raw_position;
+                    } else {
+                        // already in a match, so record the successful end_ix of this span
+                        end_ix = read_raw_position;
+                    }
+                    // move both pointers to continue scannning
                     read_raw_position += 1;
-                    continue;
+                    read_position += 1;
+                    if read_position < bytes.len() {
+                        current_byte_to_find = bytes[read_position];
+                    } else {
+                        break;
+                    }
+                } else {
+                    if !in_match {
+                        read_raw_position += 1;
+                        continue;
+                    } else {
+                        // you were in a match!
+                        // commit what you have as a gzip component, and then rescan from the
+                        // beginning on the current byte
+                        if start_ix == end_ix {
+                            // since the indexes match, we only found a single character.
+                            // TODO: start over and scan for better matches for the starter byte on
+                            // input buffer
+                            // the above todo is harder than just giving up immediately.
+                            components.push(GzipComponent::Single(start_ix));
+                            in_match = false;
+                            dbg!("could not find a match for this guy");
+                            dbg!(current_byte_to_find);
+                            dbg!("position is");
+                            dbg!(read_position);
+                            dbg!("resetting the raw pos because i got a non match after getting a match");
+                            read_raw_position = 0;
+                        } else {
+                            // the indexes do not match, so we have a span to commit
+                            components.push(GzipComponent::Span(start_ix, end_ix));
+                            in_match = false;
+                            read_raw_position = 0;
+                        }
+                    }
                 }
             }
+            // you've exhausted the current raw buffer, so it must be extended if we have not found
+            // a match
             if !in_match {
                 // not found in raw!
                 raw.push(current_byte_to_find);
                 components.push(GzipComponent::Single(raw.len() - 1));
             } else {
-                // we found it!
-                components.push(GzipComponent::Single(read_raw_position));
+                // you are in a match, but because we got to the end we need to commit the on-going
+                // span AND push on the current byte
+                if start_ix == end_ix {
+                    // we only matched a single byte from the raw buffer
+                    components.push(GzipComponent::Single(start_ix));
+                    read_raw_position = 0;
+                    in_match = false;
+                } else {
+                    components.push(GzipComponent::Span(start_ix, end_ix));
+                    read_raw_position = 0;
+                    in_match = false;
+                }
+                // did we run off the end or finish perfectly?
+                if read_position + 1 == bytes.len() {
+                    // perfect finish
+                    break;
+                } else {
+                    // we have more bytes to read, start by pushing the current byte into raw and
+                    // recording it
+                    // BUG: if i'm pushing into raw but i haven't actually scanned the whole raw for the current byte,
+                    // I should not be pushing into raw.
+                    //raw.push(current_byte_to_find);
+                    //components.push(GzipComponent::Single(raw.len() - 1));
+                    continue;
+                }
                 in_match = false;
             }
             // start over for next byte to read
@@ -80,16 +158,13 @@ impl Gzipped {
         if let Some(element) = self.components.get(index) {
             match element {
                 GzipComponent::Single(b) => Some(vec![self.raw[*b].clone()]),
-                GzipComponent::Span(start, end) => {
-                    panic!("eh")
-                },
+                GzipComponent::Span(start, end) => panic!("eh"),
             }
         } else {
             None
         }
     }
 }
-
 
 fn main() -> Result<()> {
     /*
@@ -110,17 +185,20 @@ fn main() -> Result<()> {
     */
     let compressed = Gzipped::new(&[0, 1, 2, 3, 3, 3, 1, 1]);
     use GzipComponent::*;
+    //assert_eq!(compressed.raw.len(), 4);
     assert_eq!(
         vec![
-        Single(0),
-        Single(1),
-        Single(2),
-        Single(3),
-        Single(3),
-        Single(3),
-        Single(1),
-        Single(1),
-        ], compressed.components);
+            Single(0),
+            Single(1),
+            Single(2),
+            Single(3),
+            Single(3),
+            Single(3),
+            Single(1),
+            Single(1),
+        ],
+        compressed.components
+    );
     Ok(())
 }
 
@@ -142,7 +220,7 @@ fn gunzip_print<W: Write>(readable: Gzipped, writeable: &mut W) -> Result<()> {
                 // }
                 // ix += 1;
                 writeable.flush()?;
-            },
+            }
             GzipComponent::Span(_start, _end) => {
                 // ...
             }
@@ -150,7 +228,6 @@ fn gunzip_print<W: Write>(readable: Gzipped, writeable: &mut W) -> Result<()> {
     }
     Ok(())
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -171,8 +248,12 @@ mod tests {
         let s = "abcdabcd";
         let expected = s.as_bytes().to_vec();
         let actual = format!(
-            "abcd{}abcd{}", color::Bg(color::Yellow), color::Bg(color::Reset)
-        ).as_bytes().to_vec();
+            "abcd{}abcd{}",
+            color::Bg(color::Yellow),
+            color::Bg(color::Reset)
+        )
+        .as_bytes()
+        .to_vec();
         assert_eq!(expected, actual);
         Ok(())
     }
@@ -196,25 +277,50 @@ mod tests {
     fn test_simple_repettition() {
         let compressed = Gzipped::new(&[0, 1, 2, 3, 3, 3, 1, 1]);
         use GzipComponent::*;
-        assert_eq!(compressed.raw.len(), 4);
+        //assert_eq!(compressed.raw.len(), 4);
         assert_eq!(
             vec![
-                   Single(0),
-                   Single(1),
-                   Single(2),
-                   Single(3),
-                   Single(3),
-                   Single(3),
-                   Single(1),
-                   Single(1),
-            ], compressed.components);
+                Single(0),
+                Single(1),
+                Single(2),
+                Single(3),
+                Single(3),
+                Single(3),
+                Single(1),
+                Single(1),
+            ],
+            compressed.components
+        );
+    }
+
+    #[test]
+    fn test_simple_repettition2() {
+        let compressed = Gzipped::new(&[0, 1, 2, 3, 4, 3, 1, 1]);
+        use GzipComponent::*;
+        //assert_eq!(compressed.raw.len(), 4);
+        assert_eq!(
+            vec![
+                Single(0),
+                Single(1),
+                Single(2),
+                Single(3),
+                Single(4),
+                Single(3),
+                Single(1),
+                Single(1),
+            ],
+            compressed.components
+        );
     }
 
     //#[test]
     fn test_some_compression() {
         let compressed = Gzipped::new(&[0, 1, 2, 3, 0, 1, 2, 3]);
         use GzipComponent::*;
-        assert_eq!(vec![Single(0), Single(1), Single(2), Single(3), Span(0, 3)], compressed.components);
+        assert_eq!(
+            vec![Single(0), Single(1), Single(2), Single(3), Span(0, 3)],
+            compressed.components
+        );
     }
 
     //#[test]
