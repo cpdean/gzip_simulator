@@ -50,6 +50,7 @@ impl Gzipped {
                 if current_raw_byte == current_byte_to_find {
                     // found the match!
                     // for this impl we are keeping it simple
+                    in_match = true;
                     break;
                 } else {
                     read_raw_position += 1;
@@ -63,6 +64,7 @@ impl Gzipped {
             } else {
                 // we found it!
                 components.push(GzipComponent::Single(read_raw_position));
+                in_match = false;
             }
             // start over for next byte to read
             read_raw_position = 0;
@@ -182,10 +184,11 @@ mod tests {
         assert_eq!(vec![Single(0), Single(1), Single(2)], compressed.components);
     }
 
-    //#[test]
+    #[test]
     fn test_simple_repettition() {
         let compressed = Gzipped::new(&[0, 1, 2, 3, 3, 3, 1, 1]);
         use GzipComponent::*;
+        assert_eq!(compressed.raw.len(), 4);
         assert_eq!(
             vec![
                    Single(0),
