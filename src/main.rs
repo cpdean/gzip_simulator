@@ -178,6 +178,14 @@ mod tests {
     }
 
     #[test]
+    fn test_empty() {
+        let compressed = Gzipped::new(&[]);
+        use GzipComponent::*;
+        let expected: Vec<GzipComponent> = Vec::new();
+        assert_eq!(expected, compressed.components);
+    }
+
+    #[test]
     fn test_no_compression() {
         let compressed = Gzipped::new(&[0, 1, 2]);
         use GzipComponent::*;
