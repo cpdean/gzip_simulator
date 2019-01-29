@@ -54,14 +54,13 @@ impl Gzipped {
         let mut _view_comp = components.as_slice();
         while read_position < bytes.len() {
             current_byte_to_find = bytes[read_position];
-            while read_raw_position < dbg!(raw.len()) {
+            while read_raw_position < raw.len() {
                 _view_raw = raw.as_slice();
                 _view_comp = components.as_slice();
-                let current_raw_byte = raw[dbg!(read_raw_position)];
+                let current_raw_byte = raw[read_raw_position];
                 if current_raw_byte == current_byte_to_find {
                     // found the match!
                     if !in_match {
-                        dbg!("oh boy a match");
                         in_match = true;
                         // record start of this match segment
                         start_ix = read_raw_position;
@@ -95,11 +94,6 @@ impl Gzipped {
                             // the above todo is harder than just giving up immediately.
                             components.push(GzipComponent::Single(start_ix));
                             in_match = false;
-                            dbg!("could not find a match for this guy");
-                            dbg!(current_byte_to_find);
-                            dbg!("position is");
-                            dbg!(read_position);
-                            dbg!("resetting the raw pos because i got a non match after getting a match");
                             read_raw_position = 0;
                         } else {
                             // the indexes do not match, so we have a span to commit
@@ -154,20 +148,29 @@ impl Gzipped {
         }
     }
 
-    pub fn get(&self, index: usize) -> Option<Vec<u8>> {
-        if let Some(element) = self.components.get(index) {
+    pub fn repr_component(&self, component: Option<&GzipComponent>) -> Option<Vec<u8>> {
+        if let Some(element) = component {
             match element {
                 GzipComponent::Single(b) => Some(vec![self.raw[*b].clone()]),
-                GzipComponent::Span(start, end) => panic!("eh"),
+                GzipComponent::Span(start, end) => {
+                    Some(
+                        (*start..=*end).map(|i| {
+                            self.raw[i].clone()
+                        }).collect()
+                    )
+                }
             }
         } else {
             None
         }
     }
+
+    pub fn get(&self, index: usize) -> Option<Vec<u8>> {
+        self.repr_component(self.components.get(index))
+    }
 }
 
 fn main() -> Result<()> {
-    /*
     let args: Vec<String> = std::env::args().collect();
     if args.len() == 1 {
         println!("USAGE");
@@ -182,49 +185,24 @@ fn main() -> Result<()> {
         let compressed = Gzipped::new(buffs);
         gunzip_print(compressed, &mut handle)?;
     }
-    */
-    let compressed = Gzipped::new(&[0, 1, 2, 3, 3, 3, 1, 1]);
-    use GzipComponent::*;
-    //assert_eq!(compressed.raw.len(), 4);
-    assert_eq!(
-        vec![
-            Single(0),
-            Single(1),
-            Single(2),
-            Single(3),
-            Single(3),
-            Single(3),
-            Single(1),
-            Single(1),
-        ],
-        compressed.components
-    );
     Ok(())
 }
 
 fn gunzip_print<W: Write>(readable: Gzipped, writeable: &mut W) -> Result<()> {
-    // let mut ix = 0;
-    println!("entering the for loop");
+    dbg!(&readable.raw.iter().map(|e| {*e as char}).collect::<Vec<_>>());
     for c in &readable.components {
-        match c {
-            GzipComponent::Single(byte) => {
-                println!("printing in a for loop");
-                //thread::sleep(time::Duration::from_millis(50));
-                // if ix % 2 == 0 {
-                //     write!(writeable, "{}", color::Bg(color::Yellow))?;
-                // }
-                //writeable.write()?;
-                write!(writeable, "{}", (readable.get(*byte).unwrap()[0] as char))?;
-                // if ix % 2 == 0 {
-                //     write!(writeable, "{}", color::Bg(color::Reset))?;
-                // }
-                // ix += 1;
-                writeable.flush()?;
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        let chars = readable.repr_component(Some(c)).unwrap();
+        if chars.len() == 1 {
+            write!(writeable, "{}", (chars[0] as char))?;
+        } else {
+            write!(writeable, "{}", color::Bg(color::Yellow))?;
+            for byte in chars {
+                write!(writeable, "{}", (byte as char))?;
             }
-            GzipComponent::Span(_start, _end) => {
-                // ...
-            }
+            write!(writeable, "{}", color::Bg(color::Reset))?;
         }
+        writeable.flush()?;
     }
     Ok(())
 }
@@ -233,7 +211,7 @@ fn gunzip_print<W: Write>(readable: Gzipped, writeable: &mut W) -> Result<()> {
 mod tests {
     use super::*;
 
-    //#[test]
+    #[test]
     fn test_simple_writing() -> Result<()> {
         let s = "asdf";
         let b = s.as_bytes();
