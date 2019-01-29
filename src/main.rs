@@ -297,7 +297,6 @@ mod tests {
     fn test_simple_repettition2() {
         let compressed = Gzipped::new(&[0, 1, 2, 3, 4, 3, 1, 1]);
         use GzipComponent::*;
-        //assert_eq!(compressed.raw.len(), 4);
         assert_eq!(
             vec![
                 Single(0),
@@ -313,12 +312,42 @@ mod tests {
         );
     }
 
-    //#[test]
+    #[test]
     fn test_some_compression() {
         let compressed = Gzipped::new(&[0, 1, 2, 3, 0, 1, 2, 3]);
         use GzipComponent::*;
         assert_eq!(
             vec![Single(0), Single(1), Single(2), Single(3), Span(0, 3)],
+            compressed.components
+        );
+    }
+
+    #[test]
+    fn test_bigger_compression() {
+        let compressed = Gzipped::new(&[0, 1, 2, 3, 4, 0, 1, 2, 3, 4]);
+        use GzipComponent::*;
+        assert_eq!(
+            vec![Single(0), Single(1), Single(2), Single(3), Single(4), Span(0, 4)],
+            compressed.components
+        );
+    }
+
+    #[test]
+    fn test_bigger_compression_with_repeat() {
+        let compressed = Gzipped::new(&[0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4]);
+        use GzipComponent::*;
+        assert_eq!(
+            vec![Single(0), Single(1), Single(2), Single(3), Single(4), Span(0, 4), Span(0, 4)],
+            compressed.components
+        );
+    }
+
+    #[test]
+    fn test_bigger_compression_with_repeat_and_a_break() {
+        let compressed = Gzipped::new(&[0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4]);
+        use GzipComponent::*;
+        assert_eq!(
+            vec![Single(0), Single(1), Single(2), Single(3), Single(4), Span(0, 4), Single(5), Span(0, 4)],
             compressed.components
         );
     }
