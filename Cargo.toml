@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 termion = "*"
 
-[dependencies.cursive]
-version = "0.10.0"
-default-features = false
-features = ["termion-backend"]
+# [dependencies.cursive]
+# version = "0.10.0"
+# default-features = false
+# features = ["termion-backend"]
